@@ -1,0 +1,106 @@
+name: cca-trustee
+
+services:
+  kbs:
+    image: ghcr.io/confidential-containers/staged-images/kbs-grpc-as:${TRUSTEE_TAG}
+    environment:
+      - RUST_LOG
+    command: [
+        "/usr/local/bin/kbs",
+        "--config-file",
+        "/etc/kbs-config.toml",
+      ]
+    restart: always # keep the server running
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${KBS_CONFIG}:/etc/kbs-config.toml
+      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs:rw
+    depends_on:
+      as:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+
+  as:
+    image: ghcr.io/confidential-containers/staged-images/coco-as-grpc:${TRUSTEE_TAG}
+    environment:
+      - RUST_LOG
+      - CCA_CONFIG_FILE=/etc/cca-config-remote.json
+    ports:
+    - "50004:50004"
+    restart: always # keep the server running
+    volumes:
+    - ${AS_CONFIG}:/etc/as-config.json:rw
+    - ${CCA_VERIFIER}:/etc/cca-config-remote.json:rw
+    - ./volumes/data/attestation-service:/opt/confidential-containers/attestation-service:rw
+
+    command: [
+      "grpc-as",
+      "--socket",
+      "0.0.0.0:50004",
+      "--config-file",
+      "/etc/as-config.json"
+    ]
+    depends_on:
+    - rvps
+
+  rvps:
+    image: ghcr.io/confidential-containers/staged-images/rvps:${TRUSTEE_TAG}
+    environment:
+      - RUST_LOG
+    restart: always # keep the server running
+    ports:
+      - "50003:50003"
+    volumes:
+      - ${RVPS_CONFIG}:/etc/rvps.json:rw
+      - ./volumes/data/reference-values:/opt/confidential-containers/attestation-service/reference_values:rw
+    command: [
+      "rvps",
+      "--address",
+      "0.0.0.0:50003"
+    ]
+
+  kbs-client:
+    image: ghcr.io/confidential-containers/staged-images/kbs-client-image:${TRUSTEE_TAG}
+    entrypoint: /bin/bash
+    depends_on:
+      kbs:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+    volumes:
+      - ${CCA_ATTESTATION_POLICY}:/etc/cca-default_cpu.rego
+      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs
+    command: >
+        -c "
+          if [ ! -f /opt/confidential-containers/kbs/repository/${DEMO_RESOURCE} ]; then
+            echo ${RESOURCE_DATA} >/tmp/message.txt &&
+            kbs-client --url http://kbs:8080 config \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
+              set-resource --path ${DEMO_RESOURCE} --resource-file /tmp/message.txt &&
+            rm /tmp/message.txt &&
+            kbs-client --url http://kbs:8080 config \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
+              set-resource-policy --affirming &&
+            kbs-client --url http://kbs:8080 config \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
+              set-attestation-policy  --id default_cpu --policy-file /etc/cca-default_cpu.rego;
+          fi"
+
+  setup:
+    image: alpine/openssl
+    entrypoint: /bin/ash
+    command: >
+        -c "
+          if [ ! -s /opt/confidential-containers/kbs/user-keys/private.key ]; then
+            mkdir -p /opt/confidential-containers/kbs/user-keys/ &&
+            /usr/bin/openssl genpkey -algorithm ed25519 > /opt/confidential-containers/kbs/user-keys/private.key &&
+            /usr/bin/openssl pkey -in /opt/confidential-containers/kbs/user-keys/private.key -pubout -out /opt/confidential-containers/kbs/user-keys/public.pub;
+          fi"
+    volumes:
+      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs:rw
+
+networks:
+  default:
+    name: cca-trustee
