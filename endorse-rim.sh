@@ -1,5 +1,8 @@
 #!/usr/bin/env sh
 
+# This script uses a kbs-client container to endorse a reference value
+# for a RIM (Realm initial measurement)
+
 if [ -z "$1" ]; then
     echo "Use: $0 <cca-realm-initial-measurement>"
     exit 1
