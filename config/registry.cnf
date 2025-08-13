@@ -1,0 +1,30 @@
+# OpenSSL configuration file for creating a server certificate
+# for the docker registry in Learnign Path demo.
+# To generate the key and the cerificate run:
+#
+# openssl req -x509 -days 365 -config registry.cnf -keyout registry.key -out registry.crt
+# and checkt it with
+# openssl x509  -text -noout -in registry.crt
+
+# the fully qualified server (or service) name
+FQDN = cca-trustee-registry-1.cca-trustee
+
+# the name of your organization
+ORGNAME = Learning Path Demo
+
+# subjectAltName entries
+ALTNAMES = DNS:$FQDN, DNS:registry, DNS:*.cca-trustee
+
+[ req ]
+prompt             = no
+encrypt_key        = no
+distinguished_name = dn
+x509_extensions    = req_ext
+
+[ dn ]
+C  = UK
+O  = $ORGNAME
+CN = $FQDN
+
+[ req_ext ]
+subjectAltName = $ALTNAMES

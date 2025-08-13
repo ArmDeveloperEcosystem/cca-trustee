@@ -31,8 +31,8 @@ services:
     - "50004:50004"
     restart: always # keep the server running
     volumes:
-    - ${AS_CONFIG}:/etc/as-config.json:rw
-    - ${CCA_VERIFIER}:/etc/cca-config-remote.json:rw
+    - ${AS_CONFIG}:/etc/as-config.json
+    - ${CCA_VERIFIER}:/etc/cca-config-remote.json
     - ./volumes/data/attestation-service:/opt/confidential-containers/attestation-service:rw
 
     command: [
@@ -53,7 +53,7 @@ services:
     ports:
       - "50003:50003"
     volumes:
-      - ${RVPS_CONFIG}:/etc/rvps.json:rw
+      - ${RVPS_CONFIG}:/etc/rvps.json
       - ./volumes/data/reference-values:/opt/confidential-containers/attestation-service/reference_values:rw
     command: [
       "rvps",
@@ -75,22 +75,24 @@ services:
     command: >
         -c "
           if [ ! -f /opt/confidential-containers/kbs/repository/${DEMO_RESOURCE} ]; then
+            kbs-client --url http://kbs:8080 config \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
+              set-resource-policy --affirming;
+            kbs-client --url http://kbs:8080 config \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
+              set-attestation-policy  --id default_cpu --policy-file /etc/cca-default_cpu.rego;
             echo ${RESOURCE_DATA} >/tmp/message.txt &&
             kbs-client --url http://kbs:8080 config \\
               --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
               set-resource --path ${DEMO_RESOURCE} --resource-file /tmp/message.txt &&
-            rm /tmp/message.txt &&
-            kbs-client --url http://kbs:8080 config \\
-              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
-              set-resource-policy --affirming &&
-            kbs-client --url http://kbs:8080 config \\
-              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key \\
-              set-attestation-policy  --id default_cpu --policy-file /etc/cca-default_cpu.rego;
+            rm /tmp/message.txt;
           fi"
 
   setup:
     image: alpine/openssl
     entrypoint: /bin/ash
+    volumes:
+      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs:rw
     command: >
         -c "
           if [ ! -s /opt/confidential-containers/kbs/user-keys/private.key ]; then
@@ -98,8 +100,44 @@ services:
             /usr/bin/openssl genpkey -algorithm ed25519 > /opt/confidential-containers/kbs/user-keys/private.key &&
             /usr/bin/openssl pkey -in /opt/confidential-containers/kbs/user-keys/private.key -pubout -out /opt/confidential-containers/kbs/user-keys/public.pub;
           fi"
+
+
+# Trustee project doesn't provide coco-keyprovider docker images for arm64.
+# x86_64 image is quite old as well. So, let's build images for the demo
+  keyprovider:
+    build:
+      context: https://github.com/confidential-containers/guest-components.git
+      dockerfile: attestation-agent/docker/Dockerfile.keyprovider
+    restart: always
     volumes:
-      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs:rw
+      - ${REGISTRY_CERT}:/usr/local/share/ca-certificates/registry.crt
+      - ./volumes/data/kbs-storage:/opt/confidential-containers/kbs
+    ports:
+      - "50000:50000"
+    command: >
+        /bin/bash -c "
+            update-ca-certificates >/dev/nul;
+            coco_keyprovider --socket 0.0.0.0:50000 --kbs http://kbs:8080 \\
+              --auth-private-key /opt/confidential-containers/kbs/user-keys/private.key
+           "
+    depends_on:
+      kbs:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+
+  registry:
+    image: registry:2
+    restart: always
+    environment:
+      - REGISTRY_HTTP_TLS_CERTIFICATE=/etc/registry.crt
+      - REGISTRY_HTTP_TLS_KEY=/etc/registry.key
+    ports:
+      - "5000:5000"
+    volumes:
+      - ${REGISTRY_CERT}:/etc/registry.crt
+      - ${REGISTRY_KEY}:/etc/registry.key
+      - ./volumes/data/registry:/var/lib/registry:rw
 
 networks:
   default:

@@ -4,7 +4,9 @@ docker containers with CCA attestation support.
 
 For detailed usage instructions please see
 ["Run an end-to-end Attestation with Arm CCA and Trustee"](https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee)
-Learning Path
+and
+["Run Confidential Containers with Arm CCA and Trustee"](https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-kata)
+Learning Paths
 
 The config files are based on the recommended configurations from
 [Trustee source repository](https://github.com/confidential-containers/trustee)

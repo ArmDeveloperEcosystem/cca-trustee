@@ -1,1 +1,4 @@
 volumes/
+image.key
+config/registry.crt
+config/registry.key
