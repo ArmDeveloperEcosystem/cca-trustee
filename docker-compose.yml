@@ -106,7 +106,7 @@ services:
 # x86_64 image is quite old as well. So, let's build images for the demo
   keyprovider:
     build:
-      context: https://github.com/confidential-containers/guest-components.git
+      context: https://github.com/confidential-containers/guest-components.git#${GUEST_COMPONENTS_TAG}
       dockerfile: attestation-agent/docker/Dockerfile.keyprovider
     restart: always
     volumes:
