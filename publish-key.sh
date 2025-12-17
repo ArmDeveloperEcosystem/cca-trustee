@@ -6,7 +6,7 @@
 
 KEY_FILE=${1:-image.key}
 
-if [ ! -f ${KEY_FILE} ] || [ "$(wc --bytes ${KEY_FILE})" != "32 ${KEY_FILE}" ]; then
+if [ ! -f ${KEY_FILE} ] || [ "$(wc -c ${KEY_FILE} |tr -d ' ')" != "32${KEY_FILE}" ]; then
     echo "${KEY_FILE} key should be a 32 byte key."
     echo "Please generate it:"
     echo "   head -c 32 /dev/urandom | openssl enc > ${KEY_FILE}"
